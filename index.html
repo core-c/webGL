@@ -1,0 +1,2005 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<title>Core C..</title>
+		<meta charset="utf-8">
+		<link rel="stylesheet" href="webgl.css" type="text/css">
+	</head>
+
+	<body>
+		<div><canvas id="glcanvas" width="640" height="480"></canvas></div>
+		<br>
+		<div><span>
+			<input type="button" id="loadMDM" value="Load MDM" onclick="document.getElementById('mdmfile').click();"/>
+			<input type="file" id="mdmfile" name="mdmfile" accept=".mdm" style="display:none;"/>
+			<input type="button" id="loadMDX" value="Load MDX" onclick="document.getElementById('mdxfile').click();"/>
+			<input type="file" id="mdxfile" name="mdxfile" accept=".mdx" style="display:none;"/>
+			<br>
+			<span style="border:1px solid rgb(200, 200, 200); padding-bottom:2px; padding-left:20px; padding-right:20px;"/>
+				Frame&nbsp;&nbsp;
+				<input type="button" id="animframedown" name="animframedown" value="<" onclick="javascript:frameSliderDown();"/>
+				<input type="range" id="animframe" name="animframe" min="0" max="0" value="0" oninput="javascript:framesSliderTxt();" style="vertical-align: middle;"/>
+				<input type="button" id="animframeup" name="animframeup" value=">" onclick="javascript:frameSliderUp();"/>
+				<span id="animframetxt">0</span>
+				&nbsp;&nbsp;<input type="button" id="playAnim" value="play" onclick="javascript:togglePlay();"/>
+			</span>
+			<br>
+			<span style="border:1px solid rgb(200, 200, 200); padding-bottom:2px; padding-left:20px; padding-right:20px;"/>
+				LOD&nbsp;&nbsp;
+				<input type="button" id="loddown" name="loddown" value="<" onclick="javascript:lodSliderDown();"/>
+				<input type="range" id="lod" name="lod" min="3" max="100" value="100" oninput="javascript:lodSliderTxt();" style="vertical-align: middle;"/>
+				<input type="button" id="lodup" name="lodup" value=">" onclick="javascript:lodSliderUp();"/>
+				<span id="lodtxt">0</span>
+				&nbsp;&nbsp;<input type="checkbox" id="showlod" value="show" style="vertical-align: middle;"/>Show
+			</span>
+		</span></div>
+		<div><output id="cout"></output></div>
+	</body>
+
+	<script id="glsVertex" type="x-shader/x-vertex">
+		precision highp float;
+		attribute vec3 aVertexPosition;
+		attribute vec3 aVertexNormal;
+		attribute vec2 aTextureCoord;
+		uniform mat4 uModelViewMatrix;
+		uniform mat4 uInverseModelViewMatrix;
+		uniform mat4 uProjectionMatrix;
+		uniform vec3 uViewOrigin;
+		varying vec3 vVertexNormal;
+		varying vec2 vTextureCoord;
+		varying vec3 vPosition;
+		varying vec3 vViewOrigin;
+		varying vec3 vLight0;
+		varying vec3 vLight1;
+		varying vec3 vLight2;
+		void main() {
+			gl_Position = uProjectionMatrix * uModelViewMatrix * vec4(aVertexPosition,1);
+			vPosition = (uModelViewMatrix * vec4(aVertexPosition,1)).xyz;
+			vViewOrigin = normalize(uViewOrigin - vPosition);
+			vVertexNormal = aVertexNormal;
+			vTextureCoord = aTextureCoord;
+			vec3 light0 = vec3(-200.0, 200.0, 350.0);
+			vec3 light1 = vec3(40.0, -80.0, 100.0);
+			vec3 light2 = vec3(1420.0, 1500.0, -210.0);
+			vLight0 = (uInverseModelViewMatrix * vec4(light0,0)).xyz;
+			vLight1 = (uInverseModelViewMatrix * vec4(light1,0)).xyz;
+			vLight2 = (uInverseModelViewMatrix * vec4(light2,0)).xyz;
+		}
+	</script>
+
+	<script id="glsFragment" type="x-shader/x-fragment">
+		precision highp float;
+		uniform sampler2D uSampler;
+		varying vec3 vVertexNormal;
+		varying vec2 vTextureCoord;
+		varying vec3 vPosition;
+		varying vec3 vViewOrigin;
+		varying vec3 vLight0;
+		varying vec3 vLight1;
+		varying vec3 vLight2;
+		void main() {
+			vec3 V = vViewOrigin;
+			vec3 N = vVertexNormal;
+			vec3 specular0 = vec3(0.0);
+			vec3 specular1 = vec3(0.0);
+			vec3 specular2 = vec3(0.0);
+			{	// light 0
+				vec3 L = normalize(vLight0 - vPosition);
+				float dotNL = dot(N, L);
+				if (dotNL >= 0.0) {
+					vec3 H = normalize(L + V); // the half-vector
+					float dotNH = max(0.0, dot(N, H));
+					float intensity = pow(dotNH, 2.8); // exponent
+					specular0 = intensity * 0.2750 * vec3(1.0, 1.0, 1.0); // float(intensity) * float(scale) * vec3(lightcolor)
+				}
+			}
+			{	// light 1
+				vec3 L = normalize(vLight1 - vPosition);
+				float dotNL = dot(N, L);
+				if (dotNL >= 0.0) {
+					vec3 H = normalize(L + V); // the half-vector
+					float dotNH = max(0.0, dot(N, H));
+					float intensity = pow(dotNH, 16.0); // exponent
+					specular1 = intensity * 0.7350 * vec3(1.0, 0.9, 0.7); // float(intensity) * float(scale) * vec3(lightcolor)
+				}
+			}
+			{	// light 2
+				vec3 L = normalize(vLight2 - vPosition);
+				float dotNL = dot(N, L);
+				if (dotNL >= 0.0) {
+					vec3 H = normalize(L + V); // the half-vector
+					float dotNH = max(0.0, dot(N, H));
+					float intensity = pow(dotNH, 3.0); // exponent
+					specular2 = intensity * 0.450 * vec3(1.0, 0.5, 0.1); // float(intensity) * float(scale) * vec3(lightcolor)
+				}
+			}
+
+			gl_FragColor = texture2D(uSampler, vTextureCoord)
+						+ vec4(specular0, 0) 
+						+ vec4(specular1, 0)
+						+ vec4(specular2, 0);
+		}
+	</script>
+
+	<script src="gl-matrix.js"></script>
+	
+	<script>
+		/*
+			=================================================================
+			====  MDM file handling                                      ====
+			=================================================================
+		*/
+		const MDM_ID = 0x574D444D;						// "MDMW"
+		const MDM_MAX_VERTEX = 6000;
+		const MDM_MAX_SURFACES = 32;
+		const MDM_MAX_TRIANGLES = 8192;
+		const MDM_MAX_BONES = 128;
+		const MDM_MAX_TAGS = 128;
+
+		function mdm_header_obj(_ident, _version, _name, _LODbias, _LODscale, _numsurfaces, _ofssurfaces, _numtags, _ofstags, _ofseof) {
+			this.ident = _ident;						// "MDMW"
+			this.version = _version;					// should be 3
+			this.name = _name;
+			this.LODbias = _LODbias;
+			this.LODscale = _LODscale;
+			this.numSurfaces = _numsurfaces;
+			this.ofsSurfaces = _ofssurfaces;
+			this.numTags = _numtags;
+			this.ofsTags = _ofstags;
+			this.ofsEOF = _ofseof;
+		}
+
+		function mdm_surfaceHeader_obj(_ident, _surfacename, _shadername, _shaderindex, _LODminimum, _ofsSurfaceHeader, _numVerts, _ofsVerts, _numTris, _ofsTris, _ofsCollapseMap, _numBoneRefs, _ofsBoneRefs, _surfaceDataEnd) {
+			this.ident = _ident;						// should be 9
+			this.surfacename = _surfacename;
+			this.shadername = _shadername;
+			this.shaderIndex = _shaderindex;
+			this.LODminimum = _LODminimum;
+			this.ofsSurfaceHeader = _ofsSurfaceHeader;
+			this.numVerts = _numVerts;
+			this.ofsVerts = _ofsVerts;
+			this.numTris = _numTris;
+			this.ofsTris = _ofsTris;
+			this.ofsCollapseMap = _ofsCollapseMap;
+			this.numBoneRefs = _numBoneRefs;
+			this.ofsBoneRefs = _ofsBoneRefs;
+			this.surfaceDataEnd = _surfaceDataEnd;
+		}
+		
+		function mdm_weight_obj(_boneindex, _weight, _bonespaceX, _bonespaceY, _bonespaceZ) {
+			this.boneIndex = _boneindex;
+			this.weight = _weight;
+			this.boneSpace = vec3.fromValues(_bonespaceX, _bonespaceY, _bonespaceZ);
+		}
+		
+		function mdm_vertex_obj(_normalX, _normalY, _normalZ, _tcU, _tcV, _numboneweights) {
+			this.normal = vec3.fromValues(_normalX, _normalY, _normalZ);
+			this.tcU = _tcU;
+			this.tcV = _tcV;
+			this.numBoneWeights = _numboneweights;
+			this.weights = [];
+			this.addWeight = function(weightObj) {
+				this.weights.push(weightObj);
+			}
+			this.clear = function() {
+				this.weights.length = 0;
+			}
+		}
+		
+		function mdm_triangle_obj(_vertIndex1, _vertIndex2, _vertIndex3) {
+			this.v1 = _vertIndex1;
+			this.v2 = _vertIndex2;
+			this.v3 = _vertIndex3;
+		}
+
+		function mdm_surface_obj(_headerObj) {
+			// this data is read from file
+			this.header = _headerObj;
+			this.verts = [];
+			this.tris = [];
+			this.collapseMap = [];
+			this.boneRefs = [];
+			// this next data is calculated.
+			this.vertPosBuffer = null;
+			this.vertNormalBuffer = null;
+			this.texCoordBuffer = null;
+			this.vertPos = [];			// the calculated vertex position
+			this.vertNormal = [];		// the vertex normal
+			//
+			this.addVert = function(_vertexObj) {
+				this.verts.push(_vertexObj);
+			}
+			this.addTri = function(_triObj) {
+				this.tris.push(_triObj);
+			}
+			this.addCollapseMapValue = function(_value) {
+				this.collapseMap.push(_value);
+			}
+			this.addBoneRef = function(_value) {
+				this.boneRefs.push(_value);
+			}
+			this.clear = function() {
+				this.verts.forEach(function(vert){vert.clear()});
+				this.verts.length = 0;
+				this.tris.length = 0;
+				this.collapseMap.length = 0;
+				this.boneRefs.length = 0;
+				this.vertPos.length = 0;
+				this.vertNormal.length = 0;
+			}
+		}
+
+		function mdm_surfaces_obj() {
+			this.surface = [];
+			this.addSurface = function(_surfaceObj) {
+				this.surface.push(_surfaceObj);
+			}
+			this.clear = function() {
+				this.surface.forEach(function(surf){surf.clear()});
+				this.surface.length = 0;
+			}
+		}
+
+		function mdm_tag_obj(_name, _axisX, _axisY, _axisZ, _attachToBone, _offset, _numbones, _ofsBoneList, _ofsTagDataEnd) {
+			this.name = _name;
+			this.axis = [_axisX, _axisY, _axisZ];
+			this.attachToBone = _attachToBone;
+			this.offset = _offset;
+			this.numBones = _numbones;
+			this.ofsBoneList = _ofsBoneList;
+			this.ofsTagDataEnd = _ofsTagDataEnd;
+			this.boneList = [];
+			this.addBoneToList = function(_value) {
+				this.boneList.push(_value);
+			}
+			this.clear = function() {
+				this.boneList.length = 0;
+			}
+		}
+
+		function mdm_tags_obj() {
+			this.tags = [];
+			this.addTag = function(_tagObj) {
+				this.tags.push(_tagObj);
+			}
+			this.clear = function() {
+				this.tags.forEach(function(tag){tag.clear()});
+				this.tags.length = 0;
+			}
+		}
+
+		function readMDM(evt) {
+			clearText(); // clear screen output
+			var files = evt.target.files; // FileList object
+			var file = files[0]; // we select only 1 file at a time
+			if (file) {
+				model.mdm.clear();
+				var reader = new FileReader();
+				reader.onload = function(evt) {
+					var buffer = reader.result;
+					if (!mdmHeader(buffer)) return false;
+					if (!mdmSurfaces(buffer)) return false;
+					return true;
+				};
+				reader.readAsArrayBuffer(file);
+				return true;
+			}
+			return false;
+		}
+
+		function mdmHeader(buffer) {
+			// MDM Header size is 100 bytes
+			if (buffer.byteLength < 100) {
+				alert('The MDM file header can not be read.');
+				return false;
+			}
+
+			let vIdent = new Uint32Array(buffer, 0, 1);
+			let vVersion = new Uint32Array(buffer, 4, 1);
+			let vName = new Uint8Array(buffer, 8, 64);
+			let vLODbias = new Float32Array(buffer, 72, 1);
+			let vLODscale = new Float32Array(buffer, 76, 1);
+			let vNumSurfaces = new Uint32Array(buffer, 80, 1);
+			let vOfsSurfaces = new Uint32Array(buffer, 84, 1);
+			let vNumTags = new Uint32Array(buffer, 88, 1);
+			let vOfsTags = new Uint32Array(buffer, 92, 1);
+			let vOfsEOF = new Uint32Array(buffer, 96, 1);
+			
+			// global var
+			var name = String.fromCharCode.apply(null, new Uint8Array(vName));
+			model.mdm.header = new mdm_header_obj(
+				vIdent[0],
+				vVersion[0],
+				name,
+				vLODbias[0],
+				vLODscale[0],
+				vNumSurfaces[0],
+				vOfsSurfaces[0],
+				vNumTags[0],
+				vOfsTags[0],
+				vOfsEOF[0]
+			);
+			
+			// check file type MDMW
+			if (vIdent[0] != MDM_ID) {
+				alert('The file type is not MDM');
+				return false;
+			}
+			// check limits
+			if (vNumSurfaces[0] > MDM_MAX_SURFACES) {
+				alert('The number of surfaces exceeds the limit. ('+ vNumSurfaces[0] +' > '+ MDM_MAX_SURFACES +')');
+				return false;
+			}
+			if (vNumTags[0] > MDM_MAX_TAGS) {
+				alert('The number of tags exceeds the limit. ('+ vNumTags[0] +' > '+ MDM_MAX_TAGS +')');
+				return false;
+			}
+			// all is OK. output to screen
+			printLine('MDM.Name = '+ model.mdm.header.name);
+			return true;
+		}
+
+		function mdmSurfaces(buffer) {
+			// output to screen
+			printLine('surfaces:');
+			// iterate all surfaces
+			let fp = model.mdm.header.ofsSurfaces;
+			for (let s=0; s<model.mdm.header.numSurfaces; s++) {
+				// read the surface header
+				let vIdent = new Uint32Array(buffer, fp, 1);
+				let vSurfaceName = new Uint8Array(buffer, fp+4, 64);
+				let vShaderName = new Uint8Array(buffer, fp+68, 64);
+				let vShaderIndex = new Int32Array(buffer, fp+132, 1);
+				let vLODminimum = new Uint32Array(buffer, fp+136, 1);
+				let vOfsSurfaceHeader = new Int32Array(buffer, fp+140, 1);
+				let vNumVerts = new Uint32Array(buffer, fp+144, 1);
+				let vOfsVerts = new Uint32Array(buffer, fp+148, 1);
+				let vNumTriangles = new Uint32Array(buffer, fp+152, 1);
+				let vOfsTriangles = new Uint32Array(buffer, fp+156, 1);
+				let vOfsCollapseMap = new Uint32Array(buffer, fp+160, 1);
+				let vNumBoneRefs = new Uint32Array(buffer, fp+164, 1);
+				let vOfsBoneRefs = new Uint32Array(buffer, fp+168, 1);
+				let vOfsSurfaceDataEnd = new Uint32Array(buffer, fp+172, 1);
+				var surfacename = String.fromCharCode.apply(null, new Uint16Array(vSurfaceName))
+				surfacename = surfacename.substring(0,surfacename.length-1);
+				var shadername = String.fromCharCode.apply(null, new Uint16Array(vShaderName))
+				shadername = shadername.substring(0,shadername.length-1);
+				// output to screen
+				var str = '&nbsp;&nbsp;&nbsp;&nbsp;(verts:'+ vNumVerts[0] +', tris:'+ vNumTriangles[0] +')&nbsp;&nbsp;&nbsp;&nbsp;'+ surfacename;
+				printLine(str);
+				// check limits
+				if (vNumVerts[0] > MDM_MAX_VERTEX) {
+					alert('The number of vertices exceeds the limit for surface "'+ surfacename +'". ('+ vNumVerts[0] +' > '+ MDM_MAX_VERTEX +')');
+					return false;
+				}
+				if (vNumTriangles[0] > MDM_MAX_TRIANGLES) {
+					alert('The number of triangles exceeds the limit for surface "'+ surfacename +'". ('+ vNumTriangles[0] +' > '+ MDM_MAX_TRIANGLE +')');
+					return false;
+				}
+				// create a surface-header object
+				var surfaceHeader = new mdm_surfaceHeader_obj(
+					vIdent[0],
+					surfacename,
+					shadername,
+					vShaderIndex[0],
+					vLODminimum[0],
+					vOfsSurfaceHeader[0],
+					vNumVerts[0],
+					vOfsVerts[0],
+					vNumTriangles[0],
+					vOfsTriangles[0],
+					vOfsCollapseMap[0],
+					vNumBoneRefs[0],
+					vOfsBoneRefs[0],
+					vOfsSurfaceDataEnd[0]
+				);
+				// create a surface object
+				var surface = new mdm_surface_obj(surfaceHeader);
+				// surface vertices
+				let fpv = fp + surfaceHeader.ofsVerts;
+				for (let v=0; v<surfaceHeader.numVerts; v++) {
+					let normalX = new Float32Array(buffer, fpv, 1);
+					let normalY = new Float32Array(buffer, fpv+4, 1);
+					let normalZ = new Float32Array(buffer, fpv+8, 1);
+					let tcU = new Float32Array(buffer, fpv+12, 1);
+					let tcV = new Float32Array(buffer, fpv+16, 1);
+					let numboneweights = new Uint32Array(buffer, fpv+20, 1);
+					// add the vertex values..
+					var vertObj = new mdm_vertex_obj(
+						normalX[0],
+						normalY[0],
+						normalZ[0],
+						tcU[0],
+						tcV[0],
+						numboneweights[0]
+					);
+					// ..and then add the variable-length array boneweights
+					fpv += 24; // set the filepointer to the boneweights data
+					for (let w=0; w<numboneweights[0]; w++, fpv+=20) {
+						let boneIndex = new Uint32Array(buffer, fpv, 1);
+						let weight = new Float32Array(buffer, fpv+4, 1);
+						let boneSpaceX = new Float32Array(buffer, fpv+8, 1);
+						let boneSpaceY = new Float32Array(buffer, fpv+12, 1);
+						let boneSpaceZ = new Float32Array(buffer, fpv+16, 1);
+						var weightObj = new mdm_weight_obj(
+							boneIndex[0],
+							weight[0],
+							boneSpaceX[0],
+							boneSpaceY[0],
+							boneSpaceZ[0]
+						);
+						vertObj.addWeight(weightObj);
+					}
+					// ..and add the complete vertex object to this surface
+					surface.addVert(vertObj);
+				}
+				// surface triangles
+				let fpt = fp + surfaceHeader.ofsTris;
+				for (let t=0; t<surfaceHeader.numTris; t++, fpt+=12) {
+					/* some bugger: uint32array elements must start at a multiple of 4
+					let v1 = new Uint32Array(buffer, fpt, 1);
+					let v2 = new Uint32Array(buffer, fpt+4, 1);
+					let v3 = new Uint32Array(buffer, fpt+8, 1);
+					*/
+					let v1 = new Uint32Array(buffer.slice(fpt,fpt+4), 0, 1);
+					let v2 = new Uint32Array(buffer.slice(fpt+4,fpt+8), 0, 1);
+					let v3 = new Uint32Array(buffer.slice(fpt+8,fpt+12), 0, 1);
+					var triObj = new mdm_triangle_obj(
+						v1[0],
+						v2[0],
+						v3[0]
+					);
+					surface.addTri(triObj);
+				}
+				// collapse map
+				let fpc = fp + surfaceHeader.ofsCollapseMap;
+				for (let c=0; c<surfaceHeader.numVerts; c++, fpc+=4) {
+					let cmvalue = new Uint32Array(buffer, fpc, 1);
+					surface.addCollapseMapValue(cmvalue[0]);
+				}
+				// bone refs
+				let fpb = fp + surfaceHeader.ofsBoneRefs;
+				for (let b=0; b<surfaceHeader.numBoneRefs; b++, fpb+=4) {
+					let brvalue = new Uint32Array(buffer, fpb, 1);
+					surface.addBoneRef(brvalue[0]);
+				}
+				// Now the complete surface has been read from file, and stored in memory
+				model.mdm.surfaces.addSurface(surface);
+				// set filepointer to the next surface
+				fp += vOfsSurfaceDataEnd[0]
+			}
+			// tags
+			fp = model.mdm.header.ofsTags;
+			for (let tag=0; tag<model.mdm.header.numTags; tag++) {
+				let vTagName = new Uint8Array(buffer, fp, 64);
+				let vAxisXX = new Float32Array(buffer, fp+64, 1);
+				let vAxisXY = new Float32Array(buffer, fp+68, 1);
+				let vAxisXZ = new Float32Array(buffer, fp+72, 1);
+				let vAxisYX = new Float32Array(buffer, fp+76, 1);
+				let vAxisYY = new Float32Array(buffer, fp+80, 1);
+				let vAxisYZ = new Float32Array(buffer, fp+84, 1);
+				let vAxisZX = new Float32Array(buffer, fp+88, 1);
+				let vAxisZY = new Float32Array(buffer, fp+92, 1);
+				let vAxisZZ = new Float32Array(buffer, fp+96, 1);
+				let vAttachToBone = new Uint32Array(buffer, fp+100, 1);
+				let vOffsetX = new Float32Array(buffer, fp+104, 1);
+				let vOffsetY = new Float32Array(buffer, fp+108, 1);
+				let vOffsetZ = new Float32Array(buffer, fp+112, 1);
+				let vNumBones = new Uint32Array(buffer, fp+116, 1);
+				let vOfsBoneList = new Uint32Array(buffer, fp+120, 1);
+				let vTagDataEnd = new Uint32Array(buffer, fp+124, 1);
+				// create a tag object
+				let tagname = String.fromCharCode.apply(null, new Uint8Array(vTagName))
+				let axisX = vec3.fromValues(vAxisXX[0], vAxisXY[0], vAxisXZ[0]);
+				let axisY = vec3.fromValues(vAxisYX[0], vAxisYY[0], vAxisYZ[0]);
+				let axisZ = vec3.fromValues(vAxisZX[0], vAxisZY[0], vAxisZZ[0]);
+				let offset = vec3.fromValues(vOffsetX[0], vOffsetY[0], vOffsetZ[0]);
+				var tagObj = new mdm_tag_obj(
+					tagname,
+					axisX,
+					axisY,
+					axisZ,
+					vAttachToBone[0],
+					offset,
+					vNumBones[0],
+					vOfsBoneList[0],
+					vTagDataEnd[0]
+				);
+				// add the bones to the list
+				let fpb = fp + 128
+				for (let b=0; b<vNumBones[0]; b++, fpb+=4) {
+					let bi = new Uint32Array(buffer, fpb, 1);
+					tagObj.addBoneToList(bi[0]);
+				}
+				// now add the tag to the global array
+				model.mdm.tags.addTag(tagObj);
+				// adjust the filepointer
+				fp += 128 + vNumBones[0] * 4;
+			}
+			return true;
+		}
+
+		function mdm_obj() {
+			this.header = null;
+			this.surfaces = new mdm_surfaces_obj();
+			this.tags = new mdm_tags_obj();
+			this.clear = function() {
+				this.tags.clear();
+				this.surfaces.clear();
+			}
+		}
+
+
+		/*
+			=================================================================
+			====  MDX file                                               ====
+			=================================================================
+		*/
+		const MDX_DEG = 360.0 / 65536.0;
+		const MDX_RAD = 2.0 * Math.PI / 65536.0;
+		const MDX_ID = 0x5758444D; 						// 'MDXW'
+
+		function mdx_header_obj(_ident, _version, _name, _numframes, _numbones, _ofsframes, _ofsbones, _torsoparent, _ofseof) {
+			this.ident = _ident;						// "MDXW"
+			this.version = _version;					// should be 2
+			this.name = _name;
+			this.numFrames = _numframes;
+			this.numBones = _numbones;
+			this.ofsFrames = _ofsframes;
+			this.ofsBones = _ofsbones;
+			this.torsoParent = _torsoparent;
+			this.ofsEOF = _ofseof;
+		}
+
+		function mdx_boneFrame_obj(_pitch, _yaw, _roll, _ofspitch, _ofsyaw) {
+			this.pitch = -_pitch * MDX_RAD;
+			this.yaw = -_yaw * MDX_RAD;
+			this.roll = -_roll * MDX_RAD;
+			this.ofsPitch = _ofspitch * MDX_RAD;
+			this.ofsYaw = _ofsyaw * MDX_RAD;
+		}
+		
+		function mdx_frame_obj(_minbounds, _maxbounds, _localorigin, _radius, _parentOffset) {
+			this.minBounds = _minbounds;
+			this.maxBounds = _maxbounds;
+			this.localOrigin = _localorigin;
+			this.radius = _radius;
+			this.parentOffset = _parentOffset;
+			this.boneFrame = [];
+			this.addBoneFrame = function(_boneFrameObj) {
+				this.boneFrame.push(_boneFrameObj);
+			}
+			this.clear = function() {
+				this.boneFrame.length = 0;
+			}
+		}
+
+		function mdx_frames_obj() {
+			this.frame = [];
+			this.addFrame = function(_frameObj) {
+				this.frame.push(_frameObj);
+			}
+			this.clear = function() {
+				this.frame.forEach(function(frame){frame.clear()});
+				this.frame.length = 0;
+			}
+		}
+
+		function mdx_bone(_name, _parentindex, _torsoweight, _parentdistance, _flags) {
+			this.name = _name;
+			this.parentIndex = _parentindex;
+			this.torsoWeight = _torsoweight;
+			this.parentDistance = _parentdistance;
+			this.flags = _flags;						// 1 = tag, 0 = bone
+		}
+
+		function mdx_bones_obj() {
+			// this data is read from file
+			this.bone = [];
+			// this next data is calculated.
+			// this is the animation transformed vertex data, needed for rendering..
+			this.bonePos = [];
+			this.boneMat = [];
+			//
+			this.addBonePos = function(_bonePos) {
+				this.bonePos.push(_bonePos);
+			}
+			this.addBone = function(_boneObj) {
+				this.bone.push(_boneObj);
+			}
+			this.clear = function() {
+				this.bone.length = 0;
+				this.bonePos.length = 0;
+				this.boneMat.length = 0;
+			}
+		}
+
+		function readMDX(evt) {
+			clearText(); // clear screen output
+			var files = evt.target.files; // FileList object
+			var file = files[0]; // we select only 1 file at a time
+			if (file) {
+				model.mdx.clear();
+				var reader = new FileReader();
+				reader.onload = function(evt) {
+					var buffer = reader.result;
+					if (!mdxHeader(buffer)) return false;
+					if (!mdxFrames(buffer)) return false;
+					if (!mdxBones(buffer)) return false;
+					framesSliderInit(0, model.mdx.header.numFrames-1);
+					return true;
+				}
+				reader.readAsArrayBuffer(file);
+				return true;
+			}
+			return false;
+		}
+		
+		function mdxHeader(buffer) {
+			// MDX Header size is 96 bytes
+			if (buffer.byteLength < 96) {
+				alert('The MDX file header can not be read.');
+				return false;
+			}
+			// read the values
+			let vIdent = new Uint32Array(buffer, 0, 1);
+			let vVersion = new Uint32Array(buffer, 4, 1);
+			let vName = new Uint8Array(buffer, 8, 64);
+			let vNumFrames = new Uint32Array(buffer, 72, 1);
+			let vNumBones = new Uint32Array(buffer, 76, 1);
+			let vOfsFrames = new Uint32Array(buffer, 80, 1);
+			let vOfsBones = new Uint32Array(buffer, 84, 1);
+			let vTorsoParent = new Uint32Array(buffer, 88, 1);
+			let vOfsEOF = new Uint32Array(buffer, 92, 1);
+			// global var
+			var name = String.fromCharCode.apply(null, new Uint8Array(vName));
+			model.mdx.header = new mdx_header_obj(
+				vIdent[0],
+				vVersion[0],
+				name,
+				vNumFrames[0],
+				vNumBones[0],
+				vOfsFrames[0],
+				vOfsBones[0],
+				vTorsoParent[0],
+				vOfsEOF[0]
+			);
+			// check file type MDMW
+			if (vIdent[0] != MDX_ID) {
+				alert('The file type is not MDX');
+				return false;
+			}
+			// all is OK. output to screen
+			printLine('MDX.Name = '+ model.mdx.header.name);
+			return true;
+		}
+		
+		function mdxFrames(buffer) {
+			// output to screen
+			printLine('frames:'+ model.mdx.header.numFrames);
+			// iterate all frames
+			let fp = model.mdx.header.ofsFrames;
+			for (let f=0; f<model.mdx.header.numFrames; f++) {
+				let vMinBoundsX = new Float32Array(buffer, fp, 1);
+				let vMinBoundsY = new Float32Array(buffer, fp+4, 1);
+				let vMinBoundsZ = new Float32Array(buffer, fp+8, 1);
+				let vMaxBoundsX = new Float32Array(buffer, fp+12, 1);
+				let vMaxBoundsY = new Float32Array(buffer, fp+16, 1);
+				let vMaxBoundsZ = new Float32Array(buffer, fp+20, 1);
+				let vLocalOriginX = new Float32Array(buffer, fp+24, 1);
+				let vLocalOriginY = new Float32Array(buffer, fp+28, 1);
+				let vLocalOriginZ = new Float32Array(buffer, fp+32, 1);
+				let vRadius = new Float32Array(buffer, fp+36, 1);
+				let vParentOffsetX = new Float32Array(buffer, fp+40, 1);
+				let vParentOffsetY = new Float32Array(buffer, fp+44, 1);
+				let vParentOffsetZ = new Float32Array(buffer, fp+48, 1);
+				// create a frame object
+				let minbounds = vec3.fromValues(vMinBoundsX[0], vMinBoundsY[0], vMinBoundsZ[0]);
+				let maxbounds = vec3.fromValues(vMaxBoundsX[0], vMaxBoundsY[0], vMaxBoundsZ[0]);
+				let localorigin = vec3.fromValues(vLocalOriginX[0], vLocalOriginY[0], vLocalOriginZ[0]);
+				let parentoffset = vec3.fromValues(vParentOffsetX[0], vParentOffsetY[0], vParentOffsetZ[0]);
+				var frameObj = new mdx_frame_obj(
+					minbounds, 
+					maxbounds, 
+					localorigin, 
+					vRadius[0], 
+					parentoffset
+				);
+				// add the compressed bone frames
+				let fpb = fp + 52;
+				for (let b=0; b<model.mdx.header.numBones; b++, fpb+=12) {
+					let vPitch = new Int16Array(buffer, fpb, 1);
+					let vYaw = new Int16Array(buffer, fpb+2, 1);
+					let vRoll = new Int16Array(buffer, fpb+4, 1);
+					let vOfsPitch = new Int16Array(buffer, fpb+8, 1);
+					let vOfsYaw = new Int16Array(buffer, fpb+10, 1);
+					var boneFrameObj = new mdx_boneFrame_obj(
+						vPitch[0],
+						vYaw[0],
+						vRoll[0],
+						vOfsPitch[0],
+						vOfsYaw[0]
+					);
+					// add compressed-bone-frame to frame
+					frameObj.addBoneFrame(boneFrameObj);
+				}
+				fp = fpb;
+				// add frame to global var
+				model.mdx.frames.addFrame(frameObj);
+			}
+			return true;
+		}
+		
+		function mdxBones(buffer) {
+			printLine('bones:'+ model.mdx.header.numBones); // output to screen
+			let fp = model.mdx.header.ofsBones;
+			for (let b=0; b<model.mdx.header.numBones; b++, fp+=80) {
+				let vName = new Uint8Array(buffer, fp, 64);
+				let vParentIndex = new Int32Array(buffer, fp+64, 1);
+				let vTorsoWeight = new Float32Array(buffer, fp+68, 1);
+				let vParentDistance = new Float32Array(buffer, fp+72, 1);
+				let vFlags = new Uint32Array(buffer, fp+76, 1);
+				// create a bone object
+				var name = String.fromCharCode.apply(null, new Uint16Array(vName));
+				var boneObj = new mdx_bone(
+					name,
+					vParentIndex[0],
+					vTorsoWeight[0],
+					vParentDistance[0],
+					vFlags[0]
+				);
+				// add it to the global var
+				model.mdx.bones.addBone(boneObj);
+			}
+			return true;
+		}
+	
+		function mdx_obj() {
+			this.header = null;
+			this.frames = new mdx_frames_obj();
+			this.bones = new mdx_bones_obj();
+			this.clear = function() {
+				this.frames.clear();
+				this.bones.clear();
+			}
+		}
+
+
+
+		/*
+			=================================================================
+			==== Playermodel                                             ====
+			=================================================================
+		*/
+		function playermodel_obj() {
+			this.mdm = new mdm_obj();
+			this.mdx = new mdx_obj();
+			this.animFrame = function(_f) {
+				if (!modelLoaded()) return;
+				if (_f >= this.mdx.header.numFrames) return false;
+				// iterate all surfaces
+				for (let s=0; s<this.mdm.header.numSurfaces; s++) {
+					var vCount = this.mdm.surfaces.surface[s].header.numVerts;
+					var bCount = this.mdx.header.numBones;
+//					var tCount = this.mdm.header.numTags;
+					// size arrays
+					this.mdx.bones.bonePos.length = bCount;
+					this.mdx.bones.boneMat.length = bCount;
+					this.mdm.surfaces.surface[s].vertPos.length = vCount;
+					this.mdm.surfaces.surface[s].vertNormal.length = vCount;
+					// iterate all bones
+					for (let b=0; b<bCount; b++) {
+						// bone positions..
+						var pIdx = this.mdx.bones.bone[b].parentIndex;
+						if (pIdx == -1) {
+							this.mdx.bones.bonePos[b] = vec3.fromValues(0.0, 0.0, 0.0);
+						} else {
+							var v = vec3.fromValues(this.mdx.bones.bone[b].parentDistance, 0.0, 0.0);
+							vec3.rotateY(v, v, [0,0,0], this.mdx.frames.frame[_f].boneFrame[b].ofsPitch);
+							vec3.rotateZ(v, v, [0,0,0], this.mdx.frames.frame[_f].boneFrame[b].ofsYaw);
+							vec3.add(v, v, this.mdx.bones.bonePos[pIdx]);
+							this.mdx.bones.bonePos[b] = v;
+						}
+						// bone rotations..
+						{
+						var M = mat4.create();
+						var M2 = mat4.create();
+						var M3 = mat4.create();
+						mat4.fromXRotation(M, this.mdx.frames.frame[_f].boneFrame[b].roll);
+						mat4.fromYRotation(M2, this.mdx.frames.frame[_f].boneFrame[b].pitch);
+						mat4.fromZRotation(M3, this.mdx.frames.frame[_f].boneFrame[b].yaw);
+						mat4.multiply(M, M, M2);
+						mat4.multiply(M, M, M3);
+						this.mdx.bones.boneMat[b] = M;
+						}
+					}
+					// iterate all vertices
+					for (let v=0; v<vCount; v++) {
+						this.mdm.surfaces.surface[s].vertPos[v] = vec3.fromValues(0.0, 0.0, 0.0);
+						this.mdm.surfaces.surface[s].vertNormal[v] = vec3.fromValues(0.0, 0.0, 0.0);
+						// iterate all weights
+						for (let w=0; w<this.mdm.surfaces.surface[s].verts[v].numBoneWeights; w++) {
+							var weight = this.mdm.surfaces.surface[s].verts[v].weights[w].weight;
+							var bi = this.mdm.surfaces.surface[s].verts[v].weights[w].boneIndex;
+							// vertex position
+							var bs = vec3.clone(this.mdm.surfaces.surface[s].verts[v].weights[w].boneSpace);
+							vec3.transformMat4(bs, bs, this.mdx.bones.boneMat[bi]);
+							vec3.add(bs, bs, this.mdx.bones.bonePos[bi]);
+							vec3.scale(bs, bs, weight);
+							vec3.add(this.mdm.surfaces.surface[s].vertPos[v], this.mdm.surfaces.surface[s].vertPos[v], bs);
+							// vertex normal
+							var n = vec3.clone(this.mdm.surfaces.surface[s].verts[v].normal);
+							vec3.transformMat4(n, n, this.mdx.bones.boneMat[bi]);
+							vec3.scale(n, n, weight);
+							vec3.add(this.mdm.surfaces.surface[s].vertNormal[v], this.mdm.surfaces.surface[s].vertNormal[v], n);
+						}
+					}
+					// todo: tags..
+				}
+			}
+			this.render = function(gl) {
+				// We must make a Float32Array with all the vertex-positions
+				// We do make such an array for every surface,
+				// so we can render each surface with its own texture.
+				if (!modelLoaded()) return;
+				for (let s=0; s<this.mdm.header.numSurfaces; s++) {
+					var nTris = this.mdm.surfaces.surface[s].header.numTris;
+					// #tris * 3 vertex/tri * 3 float/vert for xyz
+					var L = nTris * 3 * 3;
+					var vertPosArray = new Float32Array(L);
+					var vertNormalArray = new Float32Array(L);
+					var texCoordArray = new Float32Array(nTris * 3 * 2);
+					for (let t=0; t<nTris; t++) {
+						var v1 = this.mdm.surfaces.surface[s].tris[t].v1;
+						var v2 = this.mdm.surfaces.surface[s].tris[t].v2;
+						var v3 = this.mdm.surfaces.surface[s].tris[t].v3;
+						var idx = t * 3 * 3; // index in float32array
+						var idxTC = t * 3 * 2; // index in float32array texture coords
+						// vertex positions
+						var v = this.mdm.surfaces.surface[s].vertPos[v1];
+						vertPosArray[idx+0] = v[0];
+						vertPosArray[idx+1] = v[1];
+						vertPosArray[idx+2] = v[2];
+						v = this.mdm.surfaces.surface[s].vertPos[v2];
+						vertPosArray[idx+3] = v[0];
+						vertPosArray[idx+4] = v[1];
+						vertPosArray[idx+5] = v[2];
+						v = this.mdm.surfaces.surface[s].vertPos[v3];
+						vertPosArray[idx+6] = v[0];
+						vertPosArray[idx+7] = v[1];
+						vertPosArray[idx+8] = v[2];
+						// vertex normals
+						v = this.mdm.surfaces.surface[s].vertNormal[v1];
+						vertNormalArray[idx+0] = v[0];
+						vertNormalArray[idx+1] = v[1];
+						vertNormalArray[idx+2] = v[2];
+						v = this.mdm.surfaces.surface[s].vertNormal[v2];
+						vertNormalArray[idx+3] = v[0];
+						vertNormalArray[idx+4] = v[1];
+						vertNormalArray[idx+5] = v[2];
+						v = this.mdm.surfaces.surface[s].vertNormal[v3];
+						vertNormalArray[idx+6] = v[0];
+						vertNormalArray[idx+7] = v[1];
+						vertNormalArray[idx+8] = v[2];
+						// vertex texture coordinates
+						texCoordArray[idxTC+0] = this.mdm.surfaces.surface[s].verts[v1].tcU;
+						texCoordArray[idxTC+1] = this.mdm.surfaces.surface[s].verts[v1].tcV;
+						texCoordArray[idxTC+2] = this.mdm.surfaces.surface[s].verts[v2].tcU;
+						texCoordArray[idxTC+3] = this.mdm.surfaces.surface[s].verts[v2].tcV;
+						texCoordArray[idxTC+4] = this.mdm.surfaces.surface[s].verts[v3].tcU;
+						texCoordArray[idxTC+5] = this.mdm.surfaces.surface[s].verts[v3].tcV;
+					}
+					// attribute: vertex positions
+					if (!this.mdm.surfaces.surface[s].vertPosBuffer) {
+						this.mdm.surfaces.surface[s].vertPosBuffer = gl.createBuffer();
+						gl.bindBuffer(gl.ARRAY_BUFFER, this.mdm.surfaces.surface[s].vertPosBuffer);
+						gl.bufferData(gl.ARRAY_BUFFER, vertPosArray, gl.STATIC_DRAW);
+					} else {
+						gl.bindBuffer(gl.ARRAY_BUFFER, this.mdm.surfaces.surface[s].vertPosBuffer);
+						gl.bufferSubData(gl.ARRAY_BUFFER, 0, vertPosArray);
+					}
+					{
+						const numComponents = 3;
+						const type = gl.FLOAT;
+						const normalize = false;
+						const stride = 0;
+						const offset = 0;
+						gl.bindBuffer(gl.ARRAY_BUFFER, this.mdm.surfaces.surface[s].vertPosBuffer);
+						gl.vertexAttribPointer(programInfo.attribLocations.vertexPosition, numComponents, type, normalize, stride, offset);
+						gl.enableVertexAttribArray(programInfo.attribLocations.vertexPosition);
+					}
+					// attribute: vertex normals
+					if (!this.mdm.surfaces.surface[s].vertNormalBuffer) {
+						this.mdm.surfaces.surface[s].vertNormalBuffer = gl.createBuffer();
+						gl.bindBuffer(gl.ARRAY_BUFFER, this.mdm.surfaces.surface[s].vertNormalBuffer);
+						gl.bufferData(gl.ARRAY_BUFFER, vertNormalArray, gl.STATIC_DRAW);
+					} else {
+						gl.bindBuffer(gl.ARRAY_BUFFER, this.mdm.surfaces.surface[s].vertNormalBuffer);
+						gl.bufferSubData(gl.ARRAY_BUFFER, 0, vertNormalArray);
+					}
+					{
+						const numComponents = 3;
+						const type = gl.FLOAT;
+						const normalize = false;
+						const stride = 0;
+						const offset = 0;
+						gl.bindBuffer(gl.ARRAY_BUFFER, this.mdm.surfaces.surface[s].vertNormalBuffer);
+						gl.vertexAttribPointer(programInfo.attribLocations.vertexNormal, numComponents, type, normalize, stride, offset);
+						gl.enableVertexAttribArray(programInfo.attribLocations.vertexNormal);
+					}
+					// attribute: vertex texture coordinates
+					if (!this.mdm.surfaces.surface[s].texCoordBuffer) {
+						this.mdm.surfaces.surface[s].texCoordBuffer = gl.createBuffer();
+						gl.bindBuffer(gl.ARRAY_BUFFER, this.mdm.surfaces.surface[s].texCoordBuffer);
+						gl.bufferData(gl.ARRAY_BUFFER, texCoordArray, gl.STATIC_DRAW);
+					} else {
+						gl.bindBuffer(gl.ARRAY_BUFFER, this.mdm.surfaces.surface[s].texCoordBuffer);
+						gl.bufferSubData(gl.ARRAY_BUFFER, 0, texCoordArray);
+					}
+					{
+						const num = 2; // every coordinate composed of 2 values
+						const type = gl.FLOAT; // the data in the buffer is 32 bit float
+						const normalize = false; // don't normalize
+						const stride = 0; // how many bytes to get from one set to the next
+						const offset = 0; // how many bytes inside the buffer to start from
+						gl.bindBuffer(gl.ARRAY_BUFFER, this.mdm.surfaces.surface[s].texCoordBuffer);
+						gl.vertexAttribPointer(programInfo.attribLocations.textureCoord, num, type, normalize, stride, offset);
+						gl.enableVertexAttribArray(programInfo.attribLocations.textureCoord);
+					}
+					// assign texture
+					gl.activeTexture(gl.TEXTURE0);
+// hack
+if (this.mdm.surfaces.surface[s].header.surfacename.includes('l_legs')) {
+	gl.bindTexture(gl.TEXTURE_2D, textureLegs);
+} else {
+	gl.bindTexture(gl.TEXTURE_2D, textureBody);
+}
+//
+					gl.uniform1i(programInfo.uniformLocations.uSampler, 0);
+					// light & view positions/directions
+//					gl.uniform3f(programInfo.uniformLocations.uViewOrigin, [0,0,0]);
+//					gl.uniform3f(programInfo.uniformLocations.uLightOrigin, [100,100,100]);
+					// render
+					{
+						const offset = 0;
+						const vertexCount = nTris * 3;
+						gl.drawArrays(gl.TRIANGLES, offset, vertexCount);
+						//if (gl.getError() != gl.NO_ERROR) return;
+					}
+//					gl.deleteBuffer(vertPosBuffer);
+//					gl.deleteBuffer(vertNormalBuffer);
+//					gl.deleteBuffer(texCoordBuffer);
+				}
+			}
+		}
+		
+		var model = new playermodel_obj();
+
+
+		/*
+			=================================================================
+			==== Collapse Map   (c) 1998 by Stan Melax                   ====
+			==== https://github.com/melax/sandbox/tree/master/bunnylod   ====
+			=================================================================
+		*/
+		function cmVertex_obj(_ID, _position, _tu, _tv) {
+			this.ID = _ID;
+			this.position = vec3.create();
+			vec3.copy(this.position, _position);
+			this.uv = [_tu,_tv];
+			this.neighbour = [];
+			this.face = [];
+			this.distance = 100000000;
+			this.collapseTo = null; // ID of vert to collapse into
+			this.addNeighbour = function(_v) {
+				if (_v === this) return;
+				if (this.neighbour.indexOf(_v) == -1) this.neighbour.push(_v);
+			}
+			this.addFace = function(_f) {
+				//if (_f === this) return;
+				if (this.face.indexOf(_f) == -1) this.face.push(_f);
+			}
+			this.RemoveIfNonNeighbour = function(_n) {
+				var index = this.neighbour.indexOf(_n);
+				if (index == -1) return;
+				for (let f=0; f<this.face.length; f++) if (this.face[f].hasVertex(_n)) return;
+				this.neighbour.splice(index,1);
+			}
+		}
+		
+		function cmTriangle_obj(_ID, _v1, _v2, _v3) {
+			this.ID = _ID;
+			this.verts = [_v1, _v2, _v3];
+			this.normal = null;
+			this.ComputeNormal = function() {
+				var v1 = this.verts[0].position;
+				var v2 = this.verts[1].position;
+				var v3 = this.verts[2].position;
+				var normal = vec3.create();
+				var s1 = vec3.create();
+				var s2 = vec3.create();
+//				vec3.sub(s1, v2,v1);
+//				vec3.sub(s2, v3,v2);
+vec3.sub(s1, v1,v2);
+vec3.sub(s2, v3,v2);
+				vec3.cross(normal, s1, s2);
+				vec3.normalize(normal, normal);
+				this.normal = normal;
+			}
+			this.hasVertex = function(_v) {
+				return (_v===this.verts[0] || _v===this.verts[1] || _v===this.verts[2]);
+			}
+			this.ReplaceVertex = function(_old, _new) {
+				if (!(_old && _new)) return;
+				if (!(_old===this.verts[0] || _old===this.verts[1] || _old===this.verts[2])) return;
+				if (_new===this.verts[0] || _new===this.verts[1] || _new===this.verts[2]) return;
+
+				if (_old===this.verts[0]) {
+					this.verts[0] = _new;
+				} else if (_old===this.verts[1]) {
+					this.verts[1] = _new;
+				} else {
+					//if (_old!==this.verts[2]) return;
+					this.verts[2] = _new;
+				}
+				var index = _old.face.indexOf(this);
+				if (index != -1) _old.face.splice(index,1);
+				if (_new.face.indexOf(this) != -1) return;
+				_new.face.push(this);
+				for (let i=0; i<3; i++) {
+					if (this.verts[i] !== _new) {
+						_new.addNeighbour(this.verts[i]);
+						var index = this.verts[i].neighbour.indexOf(_old);
+						if (index != -1) this.verts[i].neighbour.splice(index,1);
+						this.verts[i].addNeighbour(_new);
+					}
+				}
+				this.ComputeNormal();
+			}
+		}
+		
+		function cmCollapseMap_obj(_s) {
+			this.surfaceNr = _s;
+			this.verts = [];	// cmVertex_obj
+			this.tris = [];
+			this.permutation = [];
+			this.collapsemap = [];
+			this.vertPosBuffer = null;
+			this.vertNormalBuffer = null;
+			this.texCoordBuffer = null;
+			this.removeVerts = [];
+			this.copyData = function() {
+				// vertices
+				var vCount = model.mdm.surfaces.surface[this.surfaceNr].header.numVerts;
+				this.verts.length = vCount;
+				for (let v=0; v<vCount; v++) {
+					this.verts[v] = new cmVertex_obj(v, model.mdm.surfaces.surface[this.surfaceNr].vertPos[v],
+														model.mdm.surfaces.surface[this.surfaceNr].verts[v].tcU, 
+														model.mdm.surfaces.surface[this.surfaceNr].verts[v].tcV);
+				}
+				// triangles
+				var tCount = model.mdm.surfaces.surface[this.surfaceNr].header.numTris;
+				this.tris.length = tCount;
+				for (let t=0; t<tCount; t++) {
+					var vi1 = model.mdm.surfaces.surface[this.surfaceNr].tris[t].v1;
+					var vi2 = model.mdm.surfaces.surface[this.surfaceNr].tris[t].v2;
+					var vi3 = model.mdm.surfaces.surface[this.surfaceNr].tris[t].v3;
+					this.tris[t] = new cmTriangle_obj(t, this.verts[vi1], this.verts[vi2], this.verts[vi3]);
+					this.tris[t].ComputeNormal();
+				}
+/*
+// weld same verts
+glMatrix.EPSILON = 1.0;
+this.removeVerts = [];
+for (let v=0; v<vCount; v++) {
+	if (!this.verts[v]) continue;
+	for (let w=v+1; w<vCount; w++) {
+		if (!this.verts[w]) continue;
+//!		if (vec3.equals(this.verts[w].position, this.verts[v].position)) {
+if (Math.abs(this.verts[w].position[0] - this.verts[v].position[0]) < glMatrix.EPSILON &&
+	Math.abs(this.verts[w].position[1] - this.verts[v].position[1]) < glMatrix.EPSILON &&
+	Math.abs(this.verts[w].position[2] - this.verts[v].position[2]) < glMatrix.EPSILON) {
+			for (let t=0; t<tCount; t++) {
+				for (let i=0; i<3; i++) {
+					if (!this.tris[t].verts[i]) continue;
+//!if (vec3.equals(this.verts[w].position, this.tris[t].verts[i].position)) {
+if (Math.abs(this.verts[w].position[0] - this.tris[t].verts[i].position[0]) < glMatrix.EPSILON &&
+	Math.abs(this.verts[w].position[1] - this.tris[t].verts[i].position[1]) < glMatrix.EPSILON &&
+	Math.abs(this.verts[w].position[2] - this.tris[t].verts[i].position[2]) < glMatrix.EPSILON) {
+	this.tris[t].verts[i] = this.verts[v];
+	this.tris[t].ComputeNormal();
+//	this.verts[w] = null;
+}
+//					if (this.tris[t].verts[i] === this.verts[w]) this.tris[t].verts[i] = this.verts[v];
+//					if (this.tris[t].verts[i] == w) this.tris[t].verts[i] = v;
+				}
+			}
+			this.removeVerts.push(this.verts[w]);
+		}
+	}
+}
+*/
+				// find the neighbours of all vertices
+				// and find the faces each vert shares
+				for (let v=0; v<vCount; v++) {
+					for (let t=0; t<tCount; t++) {
+						if (this.tris[t].hasVertex(this.verts[v])) {
+							this.verts[v].addNeighbour(this.tris[t].verts[0]);
+							this.verts[v].addNeighbour(this.tris[t].verts[1]);
+							this.verts[v].addNeighbour(this.tris[t].verts[2]);
+							this.verts[v].addFace(this.tris[t]);
+						}
+					}
+				}
+			}
+			this.ComputeEdgeCollapseCost = function(_u,_v) {
+				var edge = vec3.create();
+				vec3.sub(edge, _v.position, _u.position);
+				var edgelength = vec3.length(edge);
+				var curvature = 0.0;
+				var edgesides = [];
+				var sides = [];
+//if (_u.neighbour.length < 3) return 1000000000.0
+				for (let f=0; f<_u.face.length; f++) {
+					if (_u.face[f].hasVertex(_v)) edgesides.push(_u.face[f]);
+					else sides.push(_u.face[f]);
+				}
+/*				curvature = 1.0;
+				for (let f=0; f<sides.length; f++) {
+					var mincurve = 0.0;
+					for (let j=0; j<edgesides.length; j++) {
+						var dot = vec3.dot(sides[f].normal, edgesides[j].normal);
+						mincurve = Math.min(mincurve, 1.0 - Math.abs(dot));
+					}
+					curvature = Math.min(curvature, mincurve);// * (100 - edgesides.length);
+				}
+				return edgelength * curvature;
+*/
+var area = 0.0;
+var border = false;
+for (let f=0; f<edgesides.length; f++) {
+	area += this.triArea(edgesides[f].verts[0].position, edgesides[f].verts[1].position, edgesides[f].verts[2].position);
+	for (let i=0; i<3; i++)
+		//if (edgesides[f].verts[i] !== _u)
+			if (edgesides[f].verts[i].face.length < 3) {
+				border = true;
+				break;
+			}
+}
+if (border) return area * edgelength;
+
+/*
+if (edgesides.length <= 1) {
+	return edgelength * 10000000.0;
+}
+*/
+if (sides.length < 2) {
+	return area * edgelength * 100.0;
+}
+
+				// the area of all neighbouring triangles of _u
+//				var area = 0.0;
+				for (let f=0; f<_u.face.length; f++) area += this.triArea(_u.face[f].verts[0].position, _u.face[f].verts[1].position, _u.face[f].verts[2].position);
+				// area after collapse: edgesides are gone, _u is gone, all _u becomes _v
+				var area2 = 0.0;
+
+				for (let f=0; f<sides.length; f++) {
+					var v1 = vec3.create();
+					var v2 = vec3.create();
+					var v3 = vec3.create();
+					if (sides[f].verts[0]===_u) {
+						vec3.copy(v1, _v.position);
+						vec3.copy(v2, sides[f].verts[1].position);
+						vec3.copy(v3, sides[f].verts[2].position);
+					} else if (sides[f].verts[1]===_u) {
+						vec3.copy(v1, sides[f].verts[0].position);
+						vec3.copy(v2, _v.position);
+						vec3.copy(v3, sides[f].verts[2].position);
+					} else if (sides[f].verts[2]===_u) {
+						vec3.copy(v1, sides[f].verts[0].position);
+						vec3.copy(v2, sides[f].verts[1].position);
+						vec3.copy(v3, _v.position);
+					} else return area;
+					area2 += this.triArea(v1,v2,v3);
+					break; // all remaining sides together will always make the same (flat) plane.. so break
+				}
+
+				area -= area2;
+				return area; // this is now the difference in area: before & after collapse
+				//return area * edgelength * curvature;
+				//return curvature;
+			}
+			this.ComputeEdgeCostAtVertex = function(_v) {
+/*if (this.removeVerts.indexOf(_v) != -1) {
+	_v.collapseTo = null;
+	_v.distance = -100000000;
+	return;
+}*/
+				var nCount = _v.neighbour.length;
+				if (nCount == 0) {
+					_v.collapseTo = null;
+					_v.distance = -10000000;
+					return;
+				}
+				_v.collapseTo = null;
+				_v.distance = 1000000;
+				for (let n=0; n<nCount; n++) {
+					var dist = this.ComputeEdgeCollapseCost(_v, _v.neighbour[n]);
+					if (dist < _v.distance) {
+						_v.collapseTo = _v.neighbour[n];
+						_v.distance = dist;
+					}
+				}
+			}
+			this.ComputeAllEdgeCollapseCosts = function() {
+				for (let v=0; v<this.verts.length; v++) this.ComputeEdgeCostAtVertex(this.verts[v]);
+			}
+			this.MinimumCostEdge = function() {
+				var mn = 0;
+				for (let i=0; i<this.verts.length; i++) {
+//if (!this.verts[i] || !this.verts[mn]) continue;
+					if (this.verts[i].distance < this.verts[mn].distance) mn = i;
+				}
+				return this.verts[mn];
+			}
+			this.deleteVert = function(_v) {
+//				if (_v.face.length != 0) return;
+				var index;
+				while (_v.neighbour.length > 0) {
+					var firstNeighbour = _v.neighbour[0];
+					// remove v from neighbour
+					index = firstNeighbour.neighbour.indexOf(_v);
+					if (index != -1) firstNeighbour.neighbour.splice(index,1);
+					// remove neighbour from v
+					_v.neighbour.splice(0,1);
+				}
+				index = this.verts.indexOf(_v);
+				if (index != -1) this.verts.splice(index,1);
+			}
+			this.deleteFace = function(_f) {
+				var index;
+				for (let i=0; i<3; i++) {
+					if (_f.verts[i]) {
+						index = _f.verts[i].face.indexOf(_f);
+						if (index != -1) _f.verts[i].face.splice(index,1);
+					}
+				}
+				for (let i=0; i<3; i++) {
+					var i2 = (i+1) % 3;
+					if (!_f.verts[i] || !_f.verts[i2]) continue;
+					_f.verts[i].RemoveIfNonNeighbour(_f.verts[i2]);
+					_f.verts[i2].RemoveIfNonNeighbour(_f.verts[i]);
+				}
+				var index = this.tris.indexOf(_f);
+				if (index != -1) this.tris.splice(index,1);
+			}
+			this.Collapse = function(_old, _new) {
+				if (_new == null) {
+					this.deleteVert(_old);
+					return;
+				}
+				var tmp = [];
+				for (let i=0; i<_old.neighbour.length; i++) tmp.push(_old.neighbour[i]);
+				for (let i=_old.face.length-1; i>=0; i--) if (_old.face[i].hasVertex(_new)) this.deleteFace(_old.face[i]);
+				for (let i=0; i<_old.face.length; i++) _old.face[i].ReplaceVertex(_old, _new);
+_old.face.length = 0;
+//_old.neighbour.length = 0;		
+				this.deleteVert(_old);
+/*
+//test: deleteFace & deleteVert appear to produce something different.   todo..
+for (let v=0; v<this.verts.length; v++) {
+	this.verts[v].neighbour.length = 0;
+	this.verts[v].face.length = 0;
+	for (let t=0; t<this.tris.length; t++) {
+		if (this.tris[t].hasVertex(this.verts[v])) {
+			this.verts[v].addNeighbour(this.tris[t].verts[0]);
+			this.verts[v].addNeighbour(this.tris[t].verts[1]);
+			this.verts[v].addNeighbour(this.tris[t].verts[2]);
+			this.verts[v].addFace(this.tris[t]);
+		}
+	}
+}
+*/
+
+				for (let i=0; i<tmp.length; i++) this.ComputeEdgeCostAtVertex(tmp[i]);
+			}
+			this.ProgressiveMesh = function() {
+				this.copyData();
+				this.ComputeAllEdgeCollapseCosts();
+				var len = this.verts.length;
+				this.permutation.length = len;
+				this.collapsemap.length = len;
+				while (this.verts.length > 0) {
+					var mn = this.MinimumCostEdge();
+					this.permutation[mn.ID] = this.verts.length - 1;
+					this.collapsemap[this.verts.length-1] = (mn.collapseTo)? mn.collapseTo.ID : -1;
+					this.Collapse(mn, mn.collapseTo);
+				}
+				for (let i=0; i<this.collapsemap.length; i++) this.collapsemap[i] = (this.collapsemap[i]==-1)? 0 : this.permutation[this.collapsemap[i]];
+				// sort verts
+//this.copyData(); // test.  this sucks. must use model's vertPos
+//this.PermuteVertices();
+this.permuteData();
+			}
+			this.permuteData = function() {
+				// vertices
+				var vCount = model.mdm.surfaces.surface[this.surfaceNr].header.numVerts;
+				this.verts.length = vCount;
+				for (let v=0; v<vCount; v++) {
+					var p = this.permutation[v];
+					this.verts[p] = new cmVertex_obj(p, model.mdm.surfaces.surface[this.surfaceNr].vertPos[v],
+														model.mdm.surfaces.surface[this.surfaceNr].verts[v].tcU, 
+														model.mdm.surfaces.surface[this.surfaceNr].verts[v].tcV);
+				}
+				// triangles
+				var tCount = model.mdm.surfaces.surface[this.surfaceNr].header.numTris;
+				this.tris.length = tCount;
+				for (let t=0; t<tCount; t++) {
+					var vi1 = model.mdm.surfaces.surface[this.surfaceNr].tris[t].v1;
+					var vi2 = model.mdm.surfaces.surface[this.surfaceNr].tris[t].v2;
+					var vi3 = model.mdm.surfaces.surface[this.surfaceNr].tris[t].v3;
+					vi1 = this.permutation[vi1];
+					vi2 = this.permutation[vi2];
+					vi3 = this.permutation[vi3];
+					this.tris[t] = new cmTriangle_obj(t, this.verts[vi1], this.verts[vi2], this.verts[vi3]);
+					this.tris[t].ComputeNormal();
+				}
+/*
+// weld same verts
+glMatrix.EPSILON = 1.0;
+for (let v=0; v<vCount; v++) {
+	if (!this.verts[v]) continue;
+	for (let w=v+1; w<vCount; w++) {
+		if (!this.verts[w]) continue;
+//!		if (vec3.equals(this.verts[w].position, this.verts[v].position)) {
+if (Math.abs(this.verts[w].position[0] - this.verts[v].position[0]) < glMatrix.EPSILON &&
+	Math.abs(this.verts[w].position[1] - this.verts[v].position[1]) < glMatrix.EPSILON &&
+	Math.abs(this.verts[w].position[2] - this.verts[v].position[2]) < glMatrix.EPSILON) {
+			for (let t=0; t<tCount; t++) {
+				for (let i=0; i<3; i++) {
+					if (!this.tris[t].verts[i]) continue;
+//!if (vec3.equals(this.verts[w].position, this.tris[t].verts[i].position)) {
+if (Math.abs(this.verts[w].position[0] - this.tris[t].verts[i].position[0]) < glMatrix.EPSILON &&
+	Math.abs(this.verts[w].position[1] - this.tris[t].verts[i].position[1]) < glMatrix.EPSILON &&
+	Math.abs(this.verts[w].position[2] - this.tris[t].verts[i].position[2]) < glMatrix.EPSILON) {
+	this.tris[t].verts[i] = this.verts[v];
+	this.tris[t].ComputeNormal();
+//	this.verts[w] = null;
+}
+//					if (this.tris[t].verts[i] === this.verts[w]) this.tris[t].verts[i] = this.verts[v];
+//					if (this.tris[t].verts[i] == w) this.tris[t].verts[i] = v;
+				}
+			}
+		}
+	}
+}
+*/
+				// find the neighbours of all vertices
+				// and find the faces each vert shares
+				for (let v=0; v<vCount; v++) {
+					for (let t=0; t<tCount; t++) {
+						if (this.tris[t].hasVertex(this.verts[v])) {
+							this.verts[v].addNeighbour(this.tris[t].verts[0]);
+							this.verts[v].addNeighbour(this.tris[t].verts[1]);
+							this.verts[v].addNeighbour(this.tris[t].verts[2]);
+							this.verts[v].addFace(this.tris[t]);
+						}
+					}
+				}
+			}
+			this.Map = function(a, mx) {
+				if (mx <= 0) return 0;
+var count = 0;
+				while (a >= mx) {
+					a = this.collapsemap[a];
+count++;
+if (count > mx) return a; // sometimes a never gets < mx.   todo..
+				}
+				return a;
+			}
+			this.PermuteVertices = function() {
+				var tmp = [];
+				var i;
+				if (this.permutation.length != this.verts.length) return;
+				for (let i=0; i<this.verts.length; i++) tmp.push(this.verts[i]);
+				for (let i=0; i<this.verts.length; i++) this.verts[this.permutation[i]] = tmp[i];
+				for (let i=0; i<this.tris.length; i++) 
+					for (let j=0; j<3; j++)
+						this.tris[i].verts[j] = this.verts[this.permutation[this.tris[i].verts[j].ID]];
+			}
+			this.triArea = function(A,B,C) {
+				var ab = vec3.dot(A,B);
+				var ac = vec3.dot(A,C);
+				var bc = vec3.dot(B,C);
+				var bb = vec3.dot(B,B);
+				var aa = vec3.dot(A,A);
+				var cc = vec3.dot(C,C);
+				var area = 0.5*Math.sqrt(2*(ab*ac+ab*bc+ac*bc-ac*bb-aa*bc-ab*cc)+aa*cc+bb*cc+aa*bb-ab*ab-ac*ac-bc*bc);
+				return area;
+			}
+			this.clear = function() {
+				this.verts.length = 0;
+				this.tris.length = 0;
+				this.permutation.length = 0;
+				this.collapsemap.length = 0;
+			}
+			this.render = function(gl) {
+//this.ProgressiveMesh();
+				var percentage = document.getElementById('lod').value;
+				var renderNum = Math.floor(this.verts.length * 0.01 * percentage);
+				// count number of triangles to draw
+				var numTris = 0;
+				var triangles = [];
+				for (let t=0; t<this.tris.length; t++) {
+					var p0 = this.Map(this.tris[t].verts[0].ID, renderNum);
+					var p1 = this.Map(this.tris[t].verts[1].ID, renderNum);
+					var p2 = this.Map(this.tris[t].verts[2].ID, renderNum);
+/*if (this.tris[t].verts[0].neighbour.length<=2) continue;
+if (this.tris[t].verts[1].neighbour.length<=2) continue;
+if (this.tris[t].verts[2].neighbour.length<=2) continue;*/
+/*var i = this.verts.indexOf(this.tris[t].verts[0]);
+var p0 = this.Map(i, renderNum);
+i = this.verts.indexOf(this.tris[t].verts[1]);
+var p1 = this.Map(i, renderNum);
+i = this.verts.indexOf(this.tris[t].verts[2]);
+var p2 = this.Map(i, renderNum);*/
+					if (p0==p1 || p1==p2 || p2==p0) continue;
+					numTris++;
+					triangles.push([p0,p1,p2]);
+				}
+				//
+				var L = numTris * 3 * 3;	// max length
+				var vertPosArray = new Float32Array(L);
+				var vertNormalArray = new Float32Array(L);
+				var texCoordArray = new Float32Array(numTris * 3 * 2);
+				for (let t=0; t<numTris; t++) {
+					var p0 = triangles[t][0];
+					var p1 = triangles[t][1];
+					var p2 = triangles[t][2];
+					// compute normal, render triangle..
+					var v0 = this.verts[p0].position;
+					var v1 = this.verts[p1].position;
+					var v2 = this.verts[p2].position;
+					var normal = vec3.create();
+					var s1 = vec3.create();
+					var s2 = vec3.create();
+					vec3.sub(s1, v1,v0);
+					vec3.sub(s2, v2,v1);
+//vec3.sub(s1, v0,v1);
+//vec3.sub(s2, v2,v1);
+					vec3.cross(normal, s1, s2);
+					vec3.normalize(normal, normal);
+					var idx = t * 3 * 3; // index in float32array
+					var idxTC = t * 3 * 2; // index in float32array texture coords
+					// vertex positions
+					vertPosArray[idx+0] = v0[0];
+					vertPosArray[idx+1] = v0[1];
+					vertPosArray[idx+2] = v0[2];
+					vertPosArray[idx+3] = v1[0];
+					vertPosArray[idx+4] = v1[1];
+					vertPosArray[idx+5] = v1[2];
+					vertPosArray[idx+6] = v2[0];
+					vertPosArray[idx+7] = v2[1];
+					vertPosArray[idx+8] = v2[2];
+					// vertex normals
+					vertNormalArray[idx+0] = normal[0];
+					vertNormalArray[idx+1] = normal[1];
+					vertNormalArray[idx+2] = normal[2];
+					vertNormalArray[idx+3] = normal[0];
+					vertNormalArray[idx+4] = normal[1];
+					vertNormalArray[idx+5] = normal[2];
+					vertNormalArray[idx+6] = normal[0];
+					vertNormalArray[idx+7] = normal[1];
+					vertNormalArray[idx+8] = normal[2];
+					// vertex texture coordinates
+					texCoordArray[idxTC+0] = this.verts[p0].uv[0];
+					texCoordArray[idxTC+1] = this.verts[p0].uv[1];
+					texCoordArray[idxTC+2] = this.verts[p1].uv[0];
+					texCoordArray[idxTC+3] = this.verts[p1].uv[1];
+					texCoordArray[idxTC+4] = this.verts[p2].uv[0];
+					texCoordArray[idxTC+5] = this.verts[p2].uv[1];
+				}
+				// attribute: vertex positions
+				if (!model.mdm.surfaces.surface[this.surfaceNr].vertPosBuffer) {
+					model.mdm.surfaces.surface[this.surfaceNr].vertPosBuffer = gl.createBuffer();
+					gl.bindBuffer(gl.ARRAY_BUFFER, model.mdm.surfaces.surface[this.surfaceNr].vertPosBuffer);
+					gl.bufferData(gl.ARRAY_BUFFER, vertPosArray, gl.STATIC_DRAW);
+				} else {
+					gl.bindBuffer(gl.ARRAY_BUFFER, model.mdm.surfaces.surface[this.surfaceNr].vertPosBuffer);
+					gl.bufferSubData(gl.ARRAY_BUFFER, 0, vertPosArray);
+				}
+				{
+					const numComponents = 3;
+					const type = gl.FLOAT;
+					const normalize = false;
+					const stride = 0;
+					const offset = 0;
+					gl.bindBuffer(gl.ARRAY_BUFFER, model.mdm.surfaces.surface[this.surfaceNr].vertPosBuffer);
+					gl.vertexAttribPointer(programInfo.attribLocations.vertexPosition, numComponents, type, normalize, stride, offset);
+					gl.enableVertexAttribArray(programInfo.attribLocations.vertexPosition);
+				}
+				// attribute: vertex normals
+				if (!model.mdm.surfaces.surface[this.surfaceNr].vertNormalBuffer) {
+					model.mdm.surfaces.surface[this.surfaceNr].vertNormalBuffer = gl.createBuffer();
+					gl.bindBuffer(gl.ARRAY_BUFFER, model.mdm.surfaces.surface[this.surfaceNr].vertNormalBuffer);
+					gl.bufferData(gl.ARRAY_BUFFER, vertNormalArray, gl.STATIC_DRAW);
+				} else {
+					gl.bindBuffer(gl.ARRAY_BUFFER, model.mdm.surfaces.surface[this.surfaceNr].vertNormalBuffer);
+					gl.bufferSubData(gl.ARRAY_BUFFER, 0, vertNormalArray);
+				}
+				{
+					const numComponents = 3;
+					const type = gl.FLOAT;
+					const normalize = false;
+					const stride = 0;
+					const offset = 0;
+					gl.bindBuffer(gl.ARRAY_BUFFER, model.mdm.surfaces.surface[this.surfaceNr].vertNormalBuffer);
+					gl.vertexAttribPointer(programInfo.attribLocations.vertexNormal, numComponents, type, normalize, stride, offset);
+					gl.enableVertexAttribArray(programInfo.attribLocations.vertexNormal);
+				}
+				// attribute: vertex texture coordinates
+				if (!model.mdm.surfaces.surface[this.surfaceNr].texCoordBuffer) {
+					model.mdm.surfaces.surface[this.surfaceNr].texCoordBuffer = gl.createBuffer();
+					gl.bindBuffer(gl.ARRAY_BUFFER, model.mdm.surfaces.surface[this.surfaceNr].texCoordBuffer);
+					gl.bufferData(gl.ARRAY_BUFFER, texCoordArray, gl.STATIC_DRAW);
+				} else {
+					gl.bindBuffer(gl.ARRAY_BUFFER, model.mdm.surfaces.surface[this.surfaceNr].texCoordBuffer);
+					gl.bufferSubData(gl.ARRAY_BUFFER, 0, texCoordArray);
+				}
+				{
+					const num = 2; // every coordinate composed of 2 values
+					const type = gl.FLOAT; // the data in the buffer is 32 bit float
+					const normalize = false; // don't normalize
+					const stride = 0; // how many bytes to get from one set to the next
+					const offset = 0; // how many bytes inside the buffer to start from
+					gl.bindBuffer(gl.ARRAY_BUFFER, model.mdm.surfaces.surface[this.surfaceNr].texCoordBuffer);
+					gl.vertexAttribPointer(programInfo.attribLocations.textureCoord, num, type, normalize, stride, offset);
+					gl.enableVertexAttribArray(programInfo.attribLocations.textureCoord);
+				}
+				// assign texture
+				gl.activeTexture(gl.TEXTURE0);
+// hack
+if (model.mdm.surfaces.surface[this.surfaceNr].header.surfacename.includes('l_legs')) {
+gl.bindTexture(gl.TEXTURE_2D, textureLegs);
+} else {
+gl.bindTexture(gl.TEXTURE_2D, textureBody);
+}
+//
+				gl.uniform1i(programInfo.uniformLocations.uSampler, 0);
+				// render
+				{
+					const offset = 0;
+					const vertexCount = numTris * 3;
+					gl.drawArrays(gl.TRIANGLES, offset, vertexCount);
+					//if (gl.getError() != gl.NO_ERROR) return;
+				}
+			}
+		}
+
+		function cm_obj() {
+			this.maps = [];
+			this.init = function() {
+				this.maps.length = model.mdm.header.numSurfaces; //model.mdm.surfaces.length;
+				for (let s=0; s<model.mdm.header.numSurfaces; s++) {
+					this.maps[s] = new cmCollapseMap_obj(s);
+					this.maps[s].ProgressiveMesh();
+				}
+			}
+			this.clear = function() {
+				for (let s=0; s<this.maps.length; s++) this.maps[s].clear();
+			}
+			this.render = function(gl) {
+				for (let s=0; s<this.maps.length; s++) this.maps[s].render(gl);
+			}
+		}
+		
+		var cm = new cm_obj();
+
+		/*
+			=================================================================
+			==== webGL                                                   ====
+			=================================================================
+		*/
+		
+		function initShaderProgram(gl, vsSource, fsSource) {
+			const vertexShader = loadShader(gl, gl.VERTEX_SHADER, vsSource);
+			const fragmentShader = loadShader(gl, gl.FRAGMENT_SHADER, fsSource);
+			const shaderProgram = gl.createProgram();
+			gl.attachShader(shaderProgram, vertexShader);
+			gl.attachShader(shaderProgram, fragmentShader);
+			gl.linkProgram(shaderProgram);
+			if (!gl.getProgramParameter(shaderProgram, gl.LINK_STATUS)) {
+				alert('Unable to initialize the shader program: ' + gl.getProgramInfoLog(shaderProgram));
+				return null;
+			}
+			return shaderProgram;
+		}		
+
+		function loadShader(gl, type, source) {
+			const shader = gl.createShader(type);
+			gl.shaderSource(shader, source);
+			gl.compileShader(shader);
+			if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+				alert('An error occurred compiling the shaders: ' + gl.getShaderInfoLog(shader));
+				gl.deleteShader(shader);
+				return null;
+			}
+			return shader;
+		}
+
+		function isPowerOf2(value) {
+			return (value & (value - 1)) == 0;
+		}
+
+		function loadTexture(gl, url) {
+			const texture = gl.createTexture();
+			gl.bindTexture(gl.TEXTURE_2D, texture);
+			// Because images have to be download over the internet
+			// they might take a moment until they are ready.
+			// Until then put a single pixel in the texture so we can
+			// use it immediately. When the image has finished downloading
+			// we'll update the texture with the contents of the image.
+			const level = 0;
+			const internalFormat = gl.RGBA;
+			const width = 1;
+			const height = 1;
+			const border = 0;
+			const srcFormat = gl.RGBA;
+			const srcType = gl.UNSIGNED_BYTE;
+			const pixel = new Uint8Array([0, 0, 255, 255]);  // opaque blue
+			gl.texImage2D(gl.TEXTURE_2D, level, internalFormat,	width, height, border, srcFormat, srcType, pixel);
+			// create the image
+			const image = new Image();
+			image.onload = function() {
+				gl.bindTexture(gl.TEXTURE_2D, texture);
+				gl.texImage2D(gl.TEXTURE_2D, level, internalFormat,	srcFormat, srcType, image);
+				// WebGL1 has different requirements for power of 2 images
+				// vs non power of 2 images so check if the image is a
+				// power of 2 in both dimensions.
+				if (isPowerOf2(image.width) && isPowerOf2(image.height)) {
+					// Yes, it's a power of 2. Generate mips.
+					gl.generateMipmap(gl.TEXTURE_2D);
+				} else {
+					// No, it's not a power of 2. Turn off mips and set
+					// wrapping to clamp to edge
+					gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+					gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+					gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+				}
+				// image loaded? then refresh this frame
+				renderScene(gl, document.getElementById('animframe').value);
+			};
+			image.src = url; 
+			return texture;
+		}
+
+		function renderScene(gl, _frameNr) {
+			isRendering = true;
+			if (!modelLoaded()) return;
+
+			gl.viewport(0,0,gl.canvas.clientWidth, gl.canvas.clientHeight); 			//canvas.width,canvas.height);
+			gl.clearColor(0.0, 0.0, 0.0, 1.0);
+			gl.clearDepth(1.0);
+			gl.disable(gl.CULL_FACE);
+			gl.enable(gl.DEPTH_TEST);
+			gl.depthFunc(gl.LEQUAL);
+			gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+			const fieldOfView = glMatrix.toRadian(80);
+			const aspect = gl.canvas.clientWidth / gl.canvas.clientHeight;
+			const zNear = 0.1;
+			const zFar = 300.0;
+			const projectionMatrix = mat4.create();
+			mat4.perspective(projectionMatrix, fieldOfView, aspect, zNear, zFar);
+
+			const modelViewMatrix = mat4.create();
+			mat4.translate(modelViewMatrix, modelViewMatrix, [0.0, 0.0, orbitCamZoom]);
+			mat4.rotateX(modelViewMatrix, modelViewMatrix, glMatrix.toRadian(-90));
+			mat4.rotateZ(modelViewMatrix, modelViewMatrix, orbitCamRot);
+
+			const inverseModelViewMatrix = mat4.create();
+			mat4.invert(inverseModelViewMatrix, modelViewMatrix);
+
+			// Tell WebGL to use our program when drawing
+			gl.useProgram(programInfo.program);
+			// Set the shader uniforms
+			gl.uniformMatrix4fv(programInfo.uniformLocations.projectionMatrix, false, projectionMatrix);
+			gl.uniformMatrix4fv(programInfo.uniformLocations.modelViewMatrix, false, modelViewMatrix);
+			gl.uniformMatrix4fv(programInfo.uniformLocations.inverseModelViewMatrix, false, inverseModelViewMatrix);
+			gl.uniform3f(programInfo.uniformLocations.uViewOrigin, 0.0, 0.0, -60.0);
+
+			model.animFrame(_frameNr);
+			var showLOD = document.getElementById('showlod').checked;
+			if (showLOD) {
+				if (isPlaying) stopPlaying();
+				cm.render(gl);
+			} else {
+				model.render(gl);
+			}
+			isRendering = false;
+		}
+		
+		// the webGL render context
+		var gl = null;
+
+
+		/*
+			=================================================================
+			====                                                         ====
+			=================================================================
+		*/
+		// screen text output
+		function clearText() {
+			document.getElementById('cout').innerHTML = '';
+		}
+		function printLine(str) {
+			var pos = str.indexOf('\0');
+			if (pos == -1) {
+				var s = str + '<br>';
+			} else {
+				var s = str.slice(0, pos) + '<br>';
+			}
+			document.getElementById('cout').innerHTML += s;
+		}
+
+		// frames slider
+		function framesSliderTxt() {
+			var v = document.getElementById('animframe').value;
+			document.getElementById('animframetxt').innerHTML = v;
+			renderScene(gl, v);
+		}
+		
+		function framesSliderSet(v) {
+			document.getElementById('animframe').value = v;
+			framesSliderTxt();
+		}
+		
+		function framesSliderInit(_min, _max) {
+			document.getElementById('animframe').min = _min;
+			document.getElementById('animframe').max = _max;
+			framesSliderSet(0);
+		}
+		
+		function frameSliderDown() {
+			//if (isPlaying) return false; // auto play entire animation
+			var v = document.getElementById('animframe').value;
+			var min = document.getElementById('animframe').min;
+			var max = document.getElementById('animframe').max;
+			v--;
+			if (v < min) v = min; // clip to min value
+			//if (v < min) v = max; // cycle to max value
+			framesSliderSet(v);
+		}
+		
+		function frameSliderUp() {
+			if (isRendering) return;
+			var v = document.getElementById('animframe').value;
+			var min = document.getElementById('animframe').min;
+			var max = document.getElementById('animframe').max;
+			v++;
+			if (isPlaying) {
+				if (v > max) v = min; // cycle to min value
+			} else {
+				if (v > max) v = max; // clip to max value
+			}
+			framesSliderSet(v);
+		}
+
+		// play/stop animation
+		function startPlaying() {
+			if (!modelLoaded()) return;
+			isPlaying = true;
+			playInterval = setInterval(frameSliderUp, 100);
+			document.getElementById('playAnim').value = 'stop';
+		}
+		function stopPlaying() {
+			isPlaying = false;
+			if (playInterval) clearInterval(playInterval);
+			playInterval = null;
+			document.getElementById('playAnim').value = 'play';
+		}
+		function togglePlay() {
+			if (isPlaying) stopPlaying(); else startPlaying();
+		}
+
+
+		function lodSliderTxt() {
+			var v = document.getElementById('lod').value;
+			document.getElementById('lodtxt').innerHTML = v;
+			v = document.getElementById('animframe').value;
+			renderScene(gl, v);
+		}
+
+		function lodSliderSet(v) {
+			document.getElementById('lod').value = v;
+			lodSliderTxt();
+		}
+
+		function lodSliderDown() {
+			//if (isPlaying) return false; // auto play entire animation
+			var v = document.getElementById('lod').value;
+			var min = document.getElementById('lod').min;
+			var max = document.getElementById('lod').max;
+			v--;
+			if (v < min) v = min; // clip to min value
+			//if (v < min) v = max; // cycle to max value
+			lodSliderSet(v);
+		}
+		
+		function lodSliderUp() {
+			//if (isPlaying) return false; // auto play entire animation
+			var v = document.getElementById('lod').value;
+			var min = document.getElementById('lod').min;
+			var max = document.getElementById('lod').max;
+			v++;
+			if (v > max) v = max; // clip to max value
+			//if (v > max) v = min; // cycle to min value
+			lodSliderSet(v);
+		}
+		
+
+		// FileSystem
+		function initFS() {
+			// Check for the various File API support.
+			if (window.File && window.FileReader && window.FileList && window.Blob) {
+				// Great success! All the File APIs are supported.
+				return true;
+			} else {
+				alert('The File APIs are not fully supported in this browser.');
+				return false;
+			}
+		}
+
+		// webGL render ontext
+		function initGL() {
+			const canvas = document.querySelector("#glcanvas");
+			// Initialize the GL context
+			gl = canvas.getContext("webgl");
+			if (!gl) {
+				alert('Unable to initialize WebGL. Your browser or machine may not support it.');
+				return false;
+			}
+			gl.clearColor(0.0, 0.0, 0.0, 1.0);
+			gl.clear(gl.COLOR_BUFFER_BIT);
+
+			// global vars
+			const vsSource = document.getElementById('glsVertex').textContent;
+			const fsSource = document.getElementById('glsFragment').textContent;
+			// Initialize a shader program; this is where all the lighting
+			// for the vertices and so forth is established.
+			shaderProgram = initShaderProgram(gl, vsSource, fsSource);
+			// Collect all the info needed to use the shader program.
+			// Look up which attribute our shader program is using
+			// for aVertexPosition and look up uniform locations.
+			programInfo = {
+				program: shaderProgram,
+				attribLocations: {
+					vertexPosition: gl.getAttribLocation(shaderProgram, 'aVertexPosition'),
+					vertexNormal: gl.getAttribLocation(shaderProgram, 'aVertexNormal'),
+					textureCoord: gl.getAttribLocation(shaderProgram, 'aTextureCoord'),
+				},
+				uniformLocations: {
+					projectionMatrix: gl.getUniformLocation(shaderProgram, 'uProjectionMatrix'),
+					modelViewMatrix: gl.getUniformLocation(shaderProgram, 'uModelViewMatrix'),
+					inverseModelViewMatrix: gl.getUniformLocation(shaderProgram, 'uInverseModelViewMatrix'),
+					uSampler: gl.getUniformLocation(shaderProgram, 'uSampler'),
+					uViewOrigin: gl.getUniformLocation(shaderProgram, 'uViewOrigin'),
+				},
+			};
+			// create texture
+			textureBody = loadTexture(gl, 'body.jpg');
+			textureLegs = loadTexture(gl, 'leg01.jpg');
+			
+			return true;
+		}
+
+		function modelLoaded() {
+			if (!model) return false;
+			if (!model.mdm) return false;
+			if (!model.mdm.header) return false;
+			//if (!model.mdm.surfaces) return false;
+			//f (!model.mdm.surfaces.surface) return false;
+			if (model.mdm.surfaces.surface.length == 0) return false;
+			if (!model.mdx) return false;
+			if (!model.mdx.header) return false;
+			//if (!model.mdx.frames) return false;
+			//if (model.mdx.frames.frame) return false;
+			if (model.mdx.frames.frame.length == 0) return false;
+			return true;
+		}
+
+		var received = 0;
+		function kickstart() {
+			if (++received != 2) return;
+			if (!modelLoaded()) return;
+			framesSliderInit(0, model.mdx.header.numFrames-1);
+			cm.init();
+			startPlaying();
+		}
+		function downloadFiles() {
+			// MDM
+			var requestMDM = new XMLHttpRequest();
+			requestMDM.addEventListener('loadend', function(evt) {
+				if (evt.loaded == 0) return false;
+				if (requestMDM.response.length == 0) return false;
+				// MDM content
+				var buffer = requestMDM.response;
+				if (!mdmHeader(buffer)) return false;
+				if (!mdmSurfaces(buffer)) return false;
+				kickstart();
+			});
+			requestMDM.open('GET', 'body.mdm', true);
+			requestMDM.responseType = "arraybuffer";
+			requestMDM.send(null);
+
+			// MDX
+			var requestMDX = new XMLHttpRequest();
+			requestMDX.addEventListener('loadend', function(evt) {
+				if (evt.loaded == 0) return false;
+				if (requestMDX.response.length == 0) return false;
+				// MDX content
+				var buffer = requestMDX.response;
+				if (!mdxHeader(buffer)) return false;
+				if (!mdxFrames(buffer)) return false;
+				if (!mdxBones(buffer)) return false;
+				kickstart();
+			});
+			requestMDX.open('GET', 'akimbo.mdx', true);
+			//requestMDX.open('GET', 'body.mdx', true);
+			requestMDX.responseType = "arraybuffer";
+			requestMDX.send(null);
+		}
+
+		function init() {
+			// filesystem
+			if (initFS()) {
+				document.getElementById('mdmfile').addEventListener('change', readMDM, false);
+				document.getElementById('mdxfile').addEventListener('change', readMDX, false);
+			} else return;
+			// webGL
+			if (!initGL()) return;
+			// load the mdm/mdx from the webpage location
+			downloadFiles();
+			// dragging handler for the orbit cam
+			document.getElementById('glcanvas').addEventListener("mousemove", function(event) {
+				event.preventDefault();
+				if (!modelLoaded()) return;
+				var diffX = event.clientX - dragX;
+				var diffY = event.clientY - dragY;
+				dragX = event.clientX;
+				dragY = event.clientY;
+				if ((event.buttons & 1) != 0) {  // left mouse button down?
+					orbitCamRot += diffX * 0.01; // cam rotate
+					orbitCamZoom -= diffY * 0.1; // cam zoom
+					if (!isPlaying) renderScene(gl, document.getElementById('animframe').value);
+				}
+			}, false);
+		}
+		
+		function finalize() {
+			if (!modelLoaded()) return;
+			for (let s=0; s<model.mdm.header.numSurfaces; s++) {
+				gl.deleteBuffer(model.mdm.surfaces.surface[s].vertPosBuffer);
+				gl.deleteBuffer(model.mdm.surfaces.surface[s].vertNormalBuffer);
+				gl.deleteBuffer(model.mdm.surfaces.surface[s].texCoordBuffer);
+			}
+			model.mdm.clear();
+			model.mdx.clear();
+		}
+		
+		shaderProgram = null;
+		programInfo = null;
+		textureBody = null;
+		textureLegs = null;
+		isPlaying = false;
+		isRendering = false;
+		playInterval = null;
+		dragX = 0;
+		dragY = 0;
+		orbitCamRot = glMatrix.toRadian(-60);
+		orbitCamZoom = -60; // units
+		
+		window.addEventListener("load", function(event) {init();});
+		window.addEventListener("unload", function(event) {finalize();});
+	</script>
+</html>
